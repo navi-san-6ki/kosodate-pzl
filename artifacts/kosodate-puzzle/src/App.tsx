@@ -37,7 +37,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 // 楽天ROOM（アフィリエイト）。リンク先で購入があると運営者に紹介料が入る
 const RAKUTEN_ROOM_URL = 'https://room.rakuten.co.jp/room_3f23688527/items';
-const CONTACT_EMAIL = 'tk.work.add@gmail.com';
+// 問い合わせ専用の受付先（+kosodate 付きで届いたメールだけを自動対応の対象にする）
+const CONTACT_EMAIL = 'tk.work.add+kosodate@gmail.com';
 
 type Child = { id: string; name: string; ageMonths: number; capabilities: string[] };
 type Place = { id: string; name: string; type: string };
@@ -492,6 +493,7 @@ function PrivacyModal({ onClose }: { onClose: () => void }) {
     <p>機能の追加などに合わせて、この内容を変更することがあります。変更したときは、このページでお知らせします。</p>
     <h3>お問い合わせ</h3>
     <p>このアプリについてのご意見やご質問は、<a className="contact-link" href={`mailto:${CONTACT_EMAIL}`} data-testid="link-contact">{CONTACT_EMAIL}</a> までお送りください。</p>
+    <p>お問い合わせのメールは、返信文を作るためにAIサービス（Anthropic社のClaude）で処理します。よくある質問には、AIが作成した返信を自動でお送りすることがあり、その場合はメールの中でお知らせします。運営者への通知には通知サービス（ntfy）を使い、お問い合わせの要約だけを送ります。</p>
     <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose} data-testid="button-close-privacy">閉じる</button></div>
   </div></div>;
 }
