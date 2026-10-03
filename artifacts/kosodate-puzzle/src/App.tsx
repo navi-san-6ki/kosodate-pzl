@@ -202,7 +202,8 @@ function buildLanes(taskList: Task[]): TaskLane[] {
     lane.tasks.push(task);
     lane.minutes = Math.max(lane.minutes, task.status === 'done' ? 0 : task.durationMinutes);
   });
-  return lanes;
+  // 同じグループのタスクが1件だけなら、並行レーンではなく通常の行として扱う
+  return lanes.map((lane) => lane.label && lane.tasks.length < 2 ? { ...lane, label: undefined } : lane);
 }
 
 function parallelMinutes(taskList: Task[]) {
@@ -213,6 +214,15 @@ function IconButton({ label, onClick, children, className = '' }: { label: strin
   return <button type="button" aria-label={label} data-testid={`button-${label}`} className={`icon-button ${className}`} onClick={onClick}>{children}</button>;
 }
 
+// 家族またはタスクの保存データがあれば、初回起動ではない
+function hasSavedData() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null || localStorage.getItem(TASKS_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [family, setFamily] = useState<FamilySettings>(loadFamily);
   const [sceneId, setSceneId] = useState('morning');
@@ -220,7 +230,7 @@ function App() {
   const [activeSituation, setActiveSituation] = useState<Situation | null>(null);
   const [showFamily, setShowFamily] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [notice, setNotice] = useState('demo');
+  const [notice, setNotice] = useState(() => hasSavedData() ? '' : 'demo');
   const [replanVersion, setReplanVersion] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
 
@@ -400,19 +410,21 @@ function App() {
 
 function ChoreLanes({ tasks, replanVersion, onToggle }: { tasks: Task[]; replanVersion: number; onToggle: (taskId: string) => void }) {
   let taskNumber = 0;
-  return <div className="chore-lanes" data-testid="parallel-lanes">{buildLanes(tasks).map((lane, laneIndex) => {
-    const laneNumber = String(laneIndex + 1).padStart(2, '0');
+  let parallelLaneCount = 0;
+  return <div className="chore-lanes" data-testid="parallel-lanes">{buildLanes(tasks).map((lane) => {
     const firstTaskIndex = taskNumber;
     taskNumber += lane.tasks.length;
+    if (lane.label) parallelLaneCount += 1;
+    const laneNumber = String(parallelLaneCount).padStart(2, '0');
     return lane.label ? <section className="parallel-lane" key={`${lane.id}-${replanVersion}`} data-testid={`parallel-lane-${lane.id}`} aria-label={`並行レーン${laneNumber}`}>
       <div className="lane-heading"><span><span className="lane-number">{laneNumber}</span>並行レーン</span><strong>約{lane.minutes}分</strong></div>
       <div className="lane-tasks">{lane.tasks.map((task, index) => <TaskRow key={`${task.id}-${replanVersion}`} task={task} index={firstTaskIndex + index} onToggle={() => onToggle(task.id)} />)}</div>
-    </section> : <TaskRow key={`${lane.tasks[0].id}-${replanVersion}`} task={lane.tasks[0]} index={firstTaskIndex} onToggle={() => onToggle(lane.tasks[0].id)} />;
+    </section> : <TaskRow key={`${lane.tasks[0].id}-${replanVersion}`} task={lane.tasks[0]} index={firstTaskIndex} showParallel={false} onToggle={() => onToggle(lane.tasks[0].id)} />;
   })}</div>;
 }
 
-function TaskRow({ task, index, onToggle }: { task: Task; index: number; onToggle: () => void }) {
-  return <div className={`task-row ${task.status === 'done' ? 'completed' : ''}`} data-testid={`task-row-${task.id}`}><span className="task-index">{String(index + 1).padStart(2, '0')}</span><button type="button" className="task-check" onClick={onToggle} aria-label={`${task.title}を${task.status === 'done' ? '未完了に戻す' : '完了にする'}`} data-testid={`button-toggle-task-${task.id}`}>{task.status === 'done' && <Check size={15} strokeWidth={3} />}</button><div className="task-main"><strong>{task.title}</strong><div className="task-details"><span><Clock3 size={13} />{task.durationMinutes}分</span><span><UsersRound size={13} />{task.assignee}</span><span><MapPin size={13} />{task.location}</span>{task.parallelGroup && <small className="parallel-pill">同時進行</small>}{task.optional && <small>できたら</small>}{task.dependsOn?.length ? <small className="dependency-pill">前の作業のあと</small> : null}</div></div><span className={`task-tail ${task.canPause ? 'pause' : ''}`}>{task.canPause ? '途中で止めてもOK' : 'つづけて'}</span><button type="button" className="drag-dots" aria-label={`${task.title}を並べ替える`} data-testid={`button-reorder-task-${task.id}`}><MoreHorizontal size={18} /></button></div>;
+function TaskRow({ task, index, onToggle, showParallel = Boolean(task.parallelGroup) }: { task: Task; index: number; onToggle: () => void; showParallel?: boolean }) {
+  return <div className={`task-row ${task.status === 'done' ? 'completed' : ''}`} data-testid={`task-row-${task.id}`}><span className="task-index">{String(index + 1).padStart(2, '0')}</span><button type="button" className="task-check" onClick={onToggle} aria-label={`${task.title}を${task.status === 'done' ? '未完了に戻す' : '完了にする'}`} data-testid={`button-toggle-task-${task.id}`}>{task.status === 'done' && <Check size={15} strokeWidth={3} />}</button><div className="task-main"><strong>{task.title}</strong><div className="task-details"><span><Clock3 size={13} />{task.durationMinutes}分</span><span><UsersRound size={13} />{task.assignee}</span><span><MapPin size={13} />{task.location}</span>{showParallel && <small className="parallel-pill">同時進行</small>}{task.optional && <small>できたら</small>}{task.dependsOn?.length ? <small className="dependency-pill">前の作業のあと</small> : null}</div></div><span className={`task-tail ${task.canPause ? 'pause' : ''}`}>{task.canPause ? '途中で止めてもOK' : 'つづけて'}</span><button type="button" className="drag-dots" aria-label={`${task.title}を並べ替える`} data-testid={`button-reorder-task-${task.id}`}><MoreHorizontal size={18} /></button></div>;
 }
 
 function AddTaskModal({ sceneName, isChores, onClose, onAdd }: { sceneName: string; isChores: boolean; onClose: () => void; onAdd: (task: Omit<Task, 'id' | 'status'>) => void }) {
