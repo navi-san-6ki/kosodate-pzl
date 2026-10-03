@@ -37,6 +37,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 // 楽天ROOM（アフィリエイト）。リンク先で購入があると運営者に紹介料が入る
 const RAKUTEN_ROOM_URL = 'https://room.rakuten.co.jp/room_3f23688527/items';
+const CONTACT_EMAIL = 'tk.work.add@gmail.com';
 
 type Child = { id: string; name: string; ageMonths: number; capabilities: string[] };
 type Place = { id: string; name: string; type: string };
@@ -489,6 +490,8 @@ function PrivacyModal({ onClose }: { onClose: () => void }) {
     <p>文字をきれいに表示するため、Google Fonts（Google LLC）からフォントを読み込んでいます。このとき、お使いの端末のIPアドレスやブラウザの種類などがGoogleに送られます。家族の情報やタスクの内容は送られません。</p><p>アクセス解析や広告配信のためのプログラムは読み込んでいません。楽天ROOMのリンクを開くと楽天のサイトに移動し、そこから先は楽天グループのプライバシーポリシーが適用されます。</p>
     <h3>この内容の変更</h3>
     <p>機能の追加などに合わせて、この内容を変更することがあります。変更したときは、このページでお知らせします。</p>
+    <h3>お問い合わせ</h3>
+    <p>このアプリについてのご意見やご質問は、<a className="contact-link" href={`mailto:${CONTACT_EMAIL}`} data-testid="link-contact">{CONTACT_EMAIL}</a> までお送りください。</p>
     <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose} data-testid="button-close-privacy">閉じる</button></div>
   </div></div>;
 }
