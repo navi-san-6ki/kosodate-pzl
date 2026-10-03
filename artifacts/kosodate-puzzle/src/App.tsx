@@ -13,6 +13,7 @@ import {
   Clock3,
   CloudRain,
   Droplets,
+  ExternalLink,
   MapPin,
   Menu,
   MoreHorizontal,
@@ -22,6 +23,7 @@ import {
   Route as RouteIcon,
   ShoppingCart,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Sun,
   Trash2,
@@ -32,6 +34,11 @@ import {
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+
+// 楽天ROOM（アフィリエイト）。リンク先で購入があると運営者に紹介料が入る
+const RAKUTEN_ROOM_URL = 'https://room.rakuten.co.jp/room_3f23688527/items';
+// 問い合わせ専用の受付先（+kosodate 付きで届いたメールだけを自動対応の対象にする）
+const CONTACT_EMAIL = 'tk.work.add+kosodate@gmail.com';
 
 type Child = { id: string; name: string; ageMonths: number; capabilities: string[] };
 type Place = { id: string; name: string; type: string };
@@ -202,7 +209,8 @@ function buildLanes(taskList: Task[]): TaskLane[] {
     lane.tasks.push(task);
     lane.minutes = Math.max(lane.minutes, task.status === 'done' ? 0 : task.durationMinutes);
   });
-  return lanes;
+  // 同じグループのタスクが1件だけなら、並行レーンではなく通常の行として扱う
+  return lanes.map((lane) => lane.label && lane.tasks.length < 2 ? { ...lane, label: undefined } : lane);
 }
 
 function parallelMinutes(taskList: Task[]) {
@@ -213,6 +221,15 @@ function IconButton({ label, onClick, children, className = '' }: { label: strin
   return <button type="button" aria-label={label} data-testid={`button-${label}`} className={`icon-button ${className}`} onClick={onClick}>{children}</button>;
 }
 
+// 家族またはタスクの保存データがあれば、初回起動ではない
+function hasSavedData() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null || localStorage.getItem(TASKS_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [family, setFamily] = useState<FamilySettings>(loadFamily);
   const [sceneId, setSceneId] = useState('morning');
@@ -220,9 +237,10 @@ function App() {
   const [activeSituation, setActiveSituation] = useState<Situation | null>(null);
   const [showFamily, setShowFamily] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [notice, setNotice] = useState('demo');
+  const [notice, setNotice] = useState(() => hasSavedData() ? '' : 'demo');
   const [replanVersion, setReplanVersion] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     try {
@@ -239,6 +257,13 @@ function App() {
       // 同上
     }
   }, [tasks]);
+
+  // 通知は数秒で消し、ボタンを隠したままにしない
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const scene = scenes.find((item) => item.id === sceneId) ?? scenes[0];
   const sceneTasks = tasks[sceneId] ?? [];
@@ -383,15 +408,17 @@ function App() {
                 <div className="children-list">{family.children.map((child, index) => <div className="child-line" key={child.id}><span className={`child-avatar child-${index}`}>{child.name.slice(0, 1)}</span><div><strong>{child.name}</strong><span>{ageLabel(child.ageMonths)}・{child.capabilities[0] ?? '様子を見ながら'}</span></div><span className="child-status">{index === 0 ? '元気' : '眠そう'}</span></div>)}</div>
                 <button type="button" className="text-button" onClick={() => setShowFamily(true)} data-testid="button-edit-family">プロフィールを整える <ArrowRight size={14} /></button>
               </div>
+              <RoomPick onShowPolicy={() => setShowPrivacy(true)} />
               <div className="transport-note"><RouteIcon size={18} /><div><strong>移動手段</strong><span>{family.transportOptions.map((option) => option.name).join('・')}</span></div><button type="button" onClick={() => setShowFamily(true)} aria-label="移動手段を編集" data-testid="button-edit-transport"><Pencil size={14} /></button></div>
             </aside>
           </div>
-          <footer className="page-footer"><span><Droplets size={14} />データはこの端末だけに保存されています</span><span>こそだてパズル β版</span></footer>
+          <footer className="page-footer"><span><Droplets size={14} />家族とやることのデータは、この端末だけに保存されています</span><span className="footer-links"><button type="button" onClick={() => setShowPrivacy(true)} data-testid="button-privacy">プライバシーと広告について</button><span>こそだてパズル β版</span></span></footer>
         </div>
       </main>
 
       {activeSituation && <SituationModal situation={activeSituation} onClose={() => setActiveSituation(null)} onReplan={() => replan(activeSituation)} />}
       {showFamily && <FamilyModal family={family} onClose={() => setShowFamily(false)} onSave={(next) => { setFamily(next); setShowFamily(false); setNotice('family-saved'); }} />}
+      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
       {showTaskForm && <AddTaskModal sceneName={scene.name} isChores={sceneId === 'chores'} onClose={() => setShowTaskForm(false)} onAdd={addTask} />}
       {notice && <div className="toast-note" role="status" data-testid="status-notice"><Check size={16} />{notice === 'demo' ? 'デモ家族を読み込みました' : notice === 'family-saved' ? '家族プロフィールを保存しました' : notice === 'task-added' ? 'やることをボードに足しました' : notice === 'dependency' ? '先に前の作業を終える順番です' : notice === 'dependents-reset' ? '後に続く作業も未完了に戻しました' : notice === 'rain' ? '移動を短くする順番に組み替えました' : notice === 'delay' ? '今すぐ必要なことを先にしました' : '家族の状態に合わせて予定を組み替えました'}</div>}
     </div>
@@ -400,19 +427,21 @@ function App() {
 
 function ChoreLanes({ tasks, replanVersion, onToggle }: { tasks: Task[]; replanVersion: number; onToggle: (taskId: string) => void }) {
   let taskNumber = 0;
-  return <div className="chore-lanes" data-testid="parallel-lanes">{buildLanes(tasks).map((lane, laneIndex) => {
-    const laneNumber = String(laneIndex + 1).padStart(2, '0');
+  let parallelLaneCount = 0;
+  return <div className="chore-lanes" data-testid="parallel-lanes">{buildLanes(tasks).map((lane) => {
     const firstTaskIndex = taskNumber;
     taskNumber += lane.tasks.length;
+    if (lane.label) parallelLaneCount += 1;
+    const laneNumber = String(parallelLaneCount).padStart(2, '0');
     return lane.label ? <section className="parallel-lane" key={`${lane.id}-${replanVersion}`} data-testid={`parallel-lane-${lane.id}`} aria-label={`並行レーン${laneNumber}`}>
       <div className="lane-heading"><span><span className="lane-number">{laneNumber}</span>並行レーン</span><strong>約{lane.minutes}分</strong></div>
       <div className="lane-tasks">{lane.tasks.map((task, index) => <TaskRow key={`${task.id}-${replanVersion}`} task={task} index={firstTaskIndex + index} onToggle={() => onToggle(task.id)} />)}</div>
-    </section> : <TaskRow key={`${lane.tasks[0].id}-${replanVersion}`} task={lane.tasks[0]} index={firstTaskIndex} onToggle={() => onToggle(lane.tasks[0].id)} />;
+    </section> : <TaskRow key={`${lane.tasks[0].id}-${replanVersion}`} task={lane.tasks[0]} index={firstTaskIndex} showParallel={false} onToggle={() => onToggle(lane.tasks[0].id)} />;
   })}</div>;
 }
 
-function TaskRow({ task, index, onToggle }: { task: Task; index: number; onToggle: () => void }) {
-  return <div className={`task-row ${task.status === 'done' ? 'completed' : ''}`} data-testid={`task-row-${task.id}`}><span className="task-index">{String(index + 1).padStart(2, '0')}</span><button type="button" className="task-check" onClick={onToggle} aria-label={`${task.title}を${task.status === 'done' ? '未完了に戻す' : '完了にする'}`} data-testid={`button-toggle-task-${task.id}`}>{task.status === 'done' && <Check size={15} strokeWidth={3} />}</button><div className="task-main"><strong>{task.title}</strong><div className="task-details"><span><Clock3 size={13} />{task.durationMinutes}分</span><span><UsersRound size={13} />{task.assignee}</span><span><MapPin size={13} />{task.location}</span>{task.parallelGroup && <small className="parallel-pill">同時進行</small>}{task.optional && <small>できたら</small>}{task.dependsOn?.length ? <small className="dependency-pill">前の作業のあと</small> : null}</div></div><span className={`task-tail ${task.canPause ? 'pause' : ''}`}>{task.canPause ? '途中で止めてもOK' : 'つづけて'}</span><button type="button" className="drag-dots" aria-label={`${task.title}を並べ替える`} data-testid={`button-reorder-task-${task.id}`}><MoreHorizontal size={18} /></button></div>;
+function TaskRow({ task, index, onToggle, showParallel = Boolean(task.parallelGroup) }: { task: Task; index: number; onToggle: () => void; showParallel?: boolean }) {
+  return <div className={`task-row ${task.status === 'done' ? 'completed' : ''}`} data-testid={`task-row-${task.id}`}><span className="task-index">{String(index + 1).padStart(2, '0')}</span><button type="button" className="task-check" onClick={onToggle} aria-label={`${task.title}を${task.status === 'done' ? '未完了に戻す' : '完了にする'}`} data-testid={`button-toggle-task-${task.id}`}>{task.status === 'done' && <Check size={15} strokeWidth={3} />}</button><div className="task-main"><strong>{task.title}</strong><div className="task-details"><span><Clock3 size={13} />{task.durationMinutes}分</span><span><UsersRound size={13} />{task.assignee}</span><span><MapPin size={13} />{task.location}</span>{showParallel && <small className="parallel-pill">同時進行</small>}{task.optional && <small>できたら</small>}{task.dependsOn?.length ? <small className="dependency-pill">前の作業のあと</small> : null}</div></div><span className={`task-tail ${task.canPause ? 'pause' : ''}`}>{task.canPause ? '途中で止めてもOK' : 'つづけて'}</span><button type="button" className="drag-dots" aria-label={`${task.title}を並べ替える`} data-testid={`button-reorder-task-${task.id}`}><MoreHorizontal size={18} /></button></div>;
 }
 
 function AddTaskModal({ sceneName, isChores, onClose, onAdd }: { sceneName: string; isChores: boolean; onClose: () => void; onAdd: (task: Omit<Task, 'id' | 'status'>) => void }) {
@@ -437,6 +466,36 @@ function AddTaskModal({ sceneName, isChores, onClose, onAdd }: { sceneName: stri
   };
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="modal-panel add-task-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><div className="modal-top"><div><div className="eyebrow coral-text">今日のボードに足す</div><h2>{sceneName}のやること</h2></div><IconButton label="閉じる" onClick={onClose}><X size={19} /></IconButton></div><p className="modal-lead">今の家族に合わせて、小さな作業から足せます。</p><label className="field-label">やること<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：連絡帳を確認する" data-testid="input-new-task-title" /></label><div className="task-form-grid"><label className="field-label">所要時間（分）<input type="number" min="1" max="240" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} data-testid="input-new-task-duration" /></label><label className="field-label">担当<input value={assignee} onChange={(event) => setAssignee(event.target.value)} data-testid="input-new-task-assignee" /></label></div><div className="task-form-grid"><label className="field-label">場所<input value={location} onChange={(event) => setLocation(event.target.value)} data-testid="input-new-task-location" /></label>{isChores ? <label className="field-label">同時実行グループ<select value={parallelGroup} onChange={(event) => setParallelGroup(event.target.value)} data-testid="select-new-task-parallel"><option value="none">単独で進める</option><option value="housework-start">洗濯・料理と同時</option><option value="errands">外出前の家事と同時</option></select></label> : <span />}</div><label className="pause-option"><input type="checkbox" checked={canPause} onChange={(event) => setCanPause(event.target.checked)} data-testid="checkbox-new-task-pausable" /><span>途中で止めてもOK</span></label><div className="modal-actions"><button type="button" className="ghost-button" onClick={onClose} data-testid="button-cancel-add-task">キャンセル</button><button type="submit" className="primary-button" disabled={!title.trim()} data-testid="button-save-task"><Plus size={16} />ボードに足す</button></div></form></div>;
+}
+
+function RoomPick({ onShowPolicy }: { onShowPolicy: () => void }) {
+  return <section className="room-pick" aria-labelledby="room-pick-title" data-testid="card-rakuten-room">
+    <div className="room-pick-top"><span className="pr-label">PR</span><span>楽天ROOM</span></div>
+    <h3 id="room-pick-title">毎日の段取りを<br />助けてくれる道具</h3>
+    <p>家事や外出の準備で役立っているものを、楽天ROOMにまとめています。</p>
+    <a className="room-link" href={RAKUTEN_ROOM_URL} target="_blank" rel="noopener sponsored" data-testid="link-rakuten-room">楽天ROOMで見る<ExternalLink size={13} /></a>
+    <button type="button" className="room-note" onClick={onShowPolicy}>紹介料を受け取るリンクです</button>
+  </section>;
+}
+
+function PrivacyModal({ onClose }: { onClose: () => void }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="modal-panel privacy-modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title" onMouseDown={(event) => event.stopPropagation()} data-testid="modal-privacy">
+    <div className="modal-top"><span className="modal-icon"><ShieldCheck size={22} /></span><IconButton label="閉じる" onClick={onClose}><X size={19} /></IconButton></div>
+    <div className="eyebrow coral-text">安心して使うために</div>
+    <h2 id="privacy-title">プライバシーと広告について</h2>
+    <h3>家族の情報の保存先</h3>
+    <p>家族プロフィールややることのデータは、お使いの端末のブラウザ（localStorage）にだけ保存されます。運営者のサーバーに送られることはありません。ブラウザのサイトデータを削除すると、保存した内容も消えます。</p>
+    <h3>広告（アフィリエイト）</h3>
+    <p>このアプリには、運営者の楽天ROOMへのリンクがあります。リンク先で商品が購入されると、運営者に紹介料が支払われることがあります。「PR」と表示している部分が広告です。</p>
+    <h3>外部への情報の送信</h3>
+    <p>文字をきれいに表示するため、Google Fonts（Google LLC）からフォントを読み込んでいます。このとき、お使いの端末のIPアドレスやブラウザの種類などがGoogleに送られます。家族の情報やタスクの内容は送られません。</p><p>アクセス解析や広告配信のためのプログラムは読み込んでいません。楽天ROOMのリンクを開くと楽天のサイトに移動し、そこから先は楽天グループのプライバシーポリシーが適用されます。</p>
+    <h3>この内容の変更</h3>
+    <p>機能の追加などに合わせて、この内容を変更することがあります。変更したときは、このページでお知らせします。</p>
+    <h3>お問い合わせ</h3>
+    <p>このアプリについてのご意見やご質問は、<a className="contact-link" href={`mailto:${CONTACT_EMAIL}`} data-testid="link-contact">{CONTACT_EMAIL}</a> までお送りください。</p>
+    <p>お問い合わせのメールは、返信文を作るためにAIサービス（Anthropic社のClaude）で処理します。よくある質問には、AIが作成した返信を自動でお送りすることがあり、その場合はメールの中でお知らせします。運営者への通知には通知サービス（ntfy）を使い、お問い合わせの要約だけを送ります。</p>
+    <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose} data-testid="button-close-privacy">閉じる</button></div>
+  </div></div>;
 }
 
 function SituationModal({ situation, onClose, onReplan }: { situation: Situation; onClose: () => void; onReplan: () => void }) {
