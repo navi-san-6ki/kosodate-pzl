@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "こそだてパズル"
+description = "子どもの人数・年齢・できることと家庭の状況に合わせて、外出、食事、入浴、寝かしつけの段取りを組み立て直せる育児アプリ。まずはブラウザ内に保存できる公開ベータ版として提供します。"
+version = "1.0.0"
+id = "artifacts/kosodate-puzzle"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24807
+
+[services.development]
+run = "pnpm --filter @workspace/kosodate-puzzle run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kosodate-puzzle", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/kosodate-puzzle/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24807"
+BASE_PATH = "/"
