@@ -13,6 +13,7 @@ import {
   Clock3,
   CloudRain,
   Droplets,
+  ExternalLink,
   MapPin,
   Menu,
   MoreHorizontal,
@@ -22,6 +23,7 @@ import {
   Route as RouteIcon,
   ShoppingCart,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Sun,
   Trash2,
@@ -32,6 +34,9 @@ import {
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+
+// 楽天ROOM（アフィリエイト）。リンク先で購入があると運営者に紹介料が入る
+const RAKUTEN_ROOM_URL = 'https://room.rakuten.co.jp/room_3f23688527/items';
 
 type Child = { id: string; name: string; ageMonths: number; capabilities: string[] };
 type Place = { id: string; name: string; type: string };
@@ -233,6 +238,7 @@ function App() {
   const [notice, setNotice] = useState(() => hasSavedData() ? '' : 'demo');
   const [replanVersion, setReplanVersion] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     try {
@@ -249,6 +255,13 @@ function App() {
       // 同上
     }
   }, [tasks]);
+
+  // 通知は数秒で消し、ボタンを隠したままにしない
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const scene = scenes.find((item) => item.id === sceneId) ?? scenes[0];
   const sceneTasks = tasks[sceneId] ?? [];
@@ -393,15 +406,17 @@ function App() {
                 <div className="children-list">{family.children.map((child, index) => <div className="child-line" key={child.id}><span className={`child-avatar child-${index}`}>{child.name.slice(0, 1)}</span><div><strong>{child.name}</strong><span>{ageLabel(child.ageMonths)}・{child.capabilities[0] ?? '様子を見ながら'}</span></div><span className="child-status">{index === 0 ? '元気' : '眠そう'}</span></div>)}</div>
                 <button type="button" className="text-button" onClick={() => setShowFamily(true)} data-testid="button-edit-family">プロフィールを整える <ArrowRight size={14} /></button>
               </div>
+              <RoomPick onShowPolicy={() => setShowPrivacy(true)} />
               <div className="transport-note"><RouteIcon size={18} /><div><strong>移動手段</strong><span>{family.transportOptions.map((option) => option.name).join('・')}</span></div><button type="button" onClick={() => setShowFamily(true)} aria-label="移動手段を編集" data-testid="button-edit-transport"><Pencil size={14} /></button></div>
             </aside>
           </div>
-          <footer className="page-footer"><span><Droplets size={14} />データはこの端末だけに保存されています</span><span>こそだてパズル β版</span></footer>
+          <footer className="page-footer"><span><Droplets size={14} />家族とやることのデータは、この端末だけに保存されています</span><span className="footer-links"><button type="button" onClick={() => setShowPrivacy(true)} data-testid="button-privacy">プライバシーと広告について</button><span>こそだてパズル β版</span></span></footer>
         </div>
       </main>
 
       {activeSituation && <SituationModal situation={activeSituation} onClose={() => setActiveSituation(null)} onReplan={() => replan(activeSituation)} />}
       {showFamily && <FamilyModal family={family} onClose={() => setShowFamily(false)} onSave={(next) => { setFamily(next); setShowFamily(false); setNotice('family-saved'); }} />}
+      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
       {showTaskForm && <AddTaskModal sceneName={scene.name} isChores={sceneId === 'chores'} onClose={() => setShowTaskForm(false)} onAdd={addTask} />}
       {notice && <div className="toast-note" role="status" data-testid="status-notice"><Check size={16} />{notice === 'demo' ? 'デモ家族を読み込みました' : notice === 'family-saved' ? '家族プロフィールを保存しました' : notice === 'task-added' ? 'やることをボードに足しました' : notice === 'dependency' ? '先に前の作業を終える順番です' : notice === 'dependents-reset' ? '後に続く作業も未完了に戻しました' : notice === 'rain' ? '移動を短くする順番に組み替えました' : notice === 'delay' ? '今すぐ必要なことを先にしました' : '家族の状態に合わせて予定を組み替えました'}</div>}
     </div>
@@ -449,6 +464,33 @@ function AddTaskModal({ sceneName, isChores, onClose, onAdd }: { sceneName: stri
   };
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="modal-panel add-task-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><div className="modal-top"><div><div className="eyebrow coral-text">今日のボードに足す</div><h2>{sceneName}のやること</h2></div><IconButton label="閉じる" onClick={onClose}><X size={19} /></IconButton></div><p className="modal-lead">今の家族に合わせて、小さな作業から足せます。</p><label className="field-label">やること<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：連絡帳を確認する" data-testid="input-new-task-title" /></label><div className="task-form-grid"><label className="field-label">所要時間（分）<input type="number" min="1" max="240" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} data-testid="input-new-task-duration" /></label><label className="field-label">担当<input value={assignee} onChange={(event) => setAssignee(event.target.value)} data-testid="input-new-task-assignee" /></label></div><div className="task-form-grid"><label className="field-label">場所<input value={location} onChange={(event) => setLocation(event.target.value)} data-testid="input-new-task-location" /></label>{isChores ? <label className="field-label">同時実行グループ<select value={parallelGroup} onChange={(event) => setParallelGroup(event.target.value)} data-testid="select-new-task-parallel"><option value="none">単独で進める</option><option value="housework-start">洗濯・料理と同時</option><option value="errands">外出前の家事と同時</option></select></label> : <span />}</div><label className="pause-option"><input type="checkbox" checked={canPause} onChange={(event) => setCanPause(event.target.checked)} data-testid="checkbox-new-task-pausable" /><span>途中で止めてもOK</span></label><div className="modal-actions"><button type="button" className="ghost-button" onClick={onClose} data-testid="button-cancel-add-task">キャンセル</button><button type="submit" className="primary-button" disabled={!title.trim()} data-testid="button-save-task"><Plus size={16} />ボードに足す</button></div></form></div>;
+}
+
+function RoomPick({ onShowPolicy }: { onShowPolicy: () => void }) {
+  return <section className="room-pick" aria-labelledby="room-pick-title" data-testid="card-rakuten-room">
+    <div className="room-pick-top"><span className="pr-label">PR</span><span>楽天ROOM</span></div>
+    <h3 id="room-pick-title">毎日の段取りを<br />助けてくれる道具</h3>
+    <p>家事や外出の準備で役立っているものを、楽天ROOMにまとめています。</p>
+    <a className="room-link" href={RAKUTEN_ROOM_URL} target="_blank" rel="noopener sponsored" data-testid="link-rakuten-room">楽天ROOMで見る<ExternalLink size={13} /></a>
+    <button type="button" className="room-note" onClick={onShowPolicy}>紹介料を受け取るリンクです</button>
+  </section>;
+}
+
+function PrivacyModal({ onClose }: { onClose: () => void }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="modal-panel privacy-modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title" onMouseDown={(event) => event.stopPropagation()} data-testid="modal-privacy">
+    <div className="modal-top"><span className="modal-icon"><ShieldCheck size={22} /></span><IconButton label="閉じる" onClick={onClose}><X size={19} /></IconButton></div>
+    <div className="eyebrow coral-text">安心して使うために</div>
+    <h2 id="privacy-title">プライバシーと広告について</h2>
+    <h3>家族の情報の保存先</h3>
+    <p>家族プロフィールややることのデータは、お使いの端末のブラウザ（localStorage）にだけ保存されます。運営者のサーバーに送られることはありません。ブラウザのサイトデータを削除すると、保存した内容も消えます。</p>
+    <h3>広告（アフィリエイト）</h3>
+    <p>このアプリには、運営者の楽天ROOMへのリンクがあります。リンク先で商品が購入されると、運営者に紹介料が支払われることがあります。「PR」と表示している部分が広告です。</p>
+    <h3>外部への情報の送信</h3>
+    <p>文字をきれいに表示するため、Google Fonts（Google LLC）からフォントを読み込んでいます。このとき、お使いの端末のIPアドレスやブラウザの種類などがGoogleに送られます。家族の情報やタスクの内容は送られません。</p><p>アクセス解析や広告配信のためのプログラムは読み込んでいません。楽天ROOMのリンクを開くと楽天のサイトに移動し、そこから先は楽天グループのプライバシーポリシーが適用されます。</p>
+    <h3>この内容の変更</h3>
+    <p>機能の追加などに合わせて、この内容を変更することがあります。変更したときは、このページでお知らせします。</p>
+    <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose} data-testid="button-close-privacy">閉じる</button></div>
+  </div></div>;
 }
 
 function SituationModal({ situation, onClose, onReplan }: { situation: Situation; onClose: () => void; onReplan: () => void }) {
